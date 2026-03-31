@@ -17,23 +17,23 @@ const statusBg = { "Open": "#E6F1FB", "In Progress": "#FAEEDA", "Resolved": "#EA
 const priorityColor = { "Low": "#5F5E5A", "Medium": "#BA7517", "High": "#993C1D", "Critical": "#A32D2D" };
 const priorityBg = { "Low": "#F1EFE8", "Medium": "#FAEEDA", "High": "#FAECE7", "Critical": "#FCEBEB" };
 
-function daysSince(dateStr) {
+function daysSince(dateStr: string) {
   const d = new Date(dateStr);
   const now = new Date("2026-03-31");
-  return Math.floor((now - d) / 86400000);
+  return Math.floor((now.getTime() - d.getTime()) / 86400000);
 }
 
-function agingColor(days) {
+function agingColor(days: number) {
   if (days > 30) return "#A32D2D";
   if (days > 14) return "#BA7517";
   return "#3B6D11";
 }
 
-function Badge({ label, color, bg }) {
+function Badge({ label, color, bg }: { label: string, color: string, bg: string }) {
   return <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: bg, color, whiteSpace: "nowrap" }}>{label}</span>;
 }
 
-function initials(name) {
+function initials(name: string) {
   return name.split(" ").map(p => p[0]).join("").slice(0,2).toUpperCase();
 }
 
@@ -49,12 +49,12 @@ export default function App() {
   const [currentUserName] = useState("Current User");
   const [showForm, setShowForm] = useState(false);
   const [newComment, setNewComment] = useState("");
-  const [notification, setNotification] = useState(null);
+  const [notification, setNotification] = useState<{ msg: string, type: "success" | "error" } | null>(null);
   const [form, setForm] = useState({ title:"", category:"Bug", priority:"Medium", description:"", submitterName:"", submitter:"" });
   const [sortBy, setSortBy] = useState("createdAt");
 
-  const showNotif = (msg, type="success") => {
-    setNotification({ msg, type });
+  const showNotif = (msg: string, type: "success" | "error" = "success") => {
+    setNotification({ msg, type } as { msg: string, type: "success" | "error" } );
     setTimeout(() => setNotification(null), 3500);
   };
 
