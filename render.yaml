@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: issue-tracker-firebase-graph
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
