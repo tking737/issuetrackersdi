@@ -21,7 +21,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         recipients,
         issueTitle: issue.title,
         issueId: issue.id,
-        appUrl: new URL(request.url).origin,
       });
     }
 
