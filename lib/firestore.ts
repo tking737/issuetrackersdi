@@ -100,6 +100,17 @@ export async function uploadAttachment(issueId: string, file: File): Promise<Att
   };
 }
 
+export async function updateIssueFollowers(issueId: string, followers: string[]) {
+  const ref = adminDb.collection("issues").doc(issueId);
+  await ref.update({
+    notifyOnResolve: Array.from(
+      new Set(
+        followers.map((value) => value.trim().toLowerCase()).filter(Boolean)
+      )
+    ),
+  });
+}
+
 export async function toggleVote(issueId: string, email: string) {
   const ref = issuesCollection.doc(issueId);
   await adminDb.runTransaction(async (tx) => {
