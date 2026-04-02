@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  updateProfile,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { allowedDomainsLabel, isAllowedEmail } from "@/lib/auth-config";
@@ -42,6 +44,8 @@ function firebaseMessage(code?: string, fallback?: string) {
 }
 
 export function LoginPanel() {
+  const router = useRouter();
+
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -55,7 +59,8 @@ export function LoginPanel() {
   const [lastEmailActionAt, setLastEmailActionAt] = useState(0);
 
   const allowedLabel = useMemo(() => allowedDomainsLabel(), []);
-  const canSubmit = !busy && !!email.trim() && (mode === "reset" || !!password.trim());
+  const canSubmit =
+    !busy && !!email.trim() && (mode === "reset" || !!password.trim());
 
   const remainingAuthCooldown = Math.max(
     0,
@@ -104,7 +109,11 @@ export function LoginPanel() {
       setBusy(true);
       markAuthAttempt();
 
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
 
       if (!credential.user.emailVerified) {
         enforceEmailCooldown();
@@ -121,6 +130,9 @@ export function LoginPanel() {
       }
 
       setMessage("Signed in successfully.");
+
+      router.push("/");
+      router.refresh();
     } catch (err: any) {
       setError(firebaseMessage(err?.code, err?.message));
     } finally {
@@ -148,6 +160,12 @@ export function LoginPanel() {
         email.trim(),
         password
       );
+
+      if (name.trim()) {
+        await updateProfile(credential.user, {
+          displayName: name.trim(),
+        });
+      }
 
       await sendEmailVerification(credential.user, {
         url: process.env.NEXT_PUBLIC_APP_URL || window.location.origin,
@@ -209,7 +227,10 @@ export function LoginPanel() {
   };
 
   return (
-    <div className="card" style={{ padding: 28, maxWidth: 520, margin: "40px auto" }}>
+    <div
+      className="card"
+      style={{ padding: 28, maxWidth: 520, margin: "40px auto" }}
+    >
       <h1 style={{ margin: 0, fontSize: 28 }}>Internal issue tracker</h1>
       <p style={{ color: "#475467", lineHeight: 1.6 }}>
         Sign in with your company email and password.
@@ -284,7 +305,9 @@ export function LoginPanel() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder={mode === "signup" ? "Create a password" : "Enter your password"}
+            placeholder={
+              mode === "signup" ? "Create a password" : "Enter your password"
+            }
             autoComplete={mode === "signup" ? "new-password" : "current-password"}
           />
           {mode === "signup" ? (
@@ -328,8 +351,12 @@ export function LoginPanel() {
         </p>
       ) : null}
 
-      {message ? <p style={{ color: "#067647", marginTop: 16 }}>{message}</p> : null}
-      {error ? <p style={{ color: "#b42318", marginTop: 16 }}>{error}</p> : null}
+      {message ? (
+        <p style={{ color: "#067647", marginTop: 16 }}>{message}</p>
+      ) : null}
+      {error ? (
+        <p style={{ color: "#b42318", marginTop: 16 }}>{error}</p>
+      ) : null}
     </div>
   );
 }
