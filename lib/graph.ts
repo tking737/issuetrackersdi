@@ -87,7 +87,12 @@ async function sendMail(options: {
       }
     );
 
-    if (mailRes.ok) sent += 1;
+    if (!mailRes.ok) {
+      const text = await mailRes.text().catch(() => "");
+      throw new Error(`Graph sendMail failed for ${recipient}. ${text}`);
+    }
+
+    sent += 1;
   }
 
   return sent;
