@@ -32,6 +32,8 @@ type Notification = {
   type: "success" | "error";
 };
 
+type StatusFilter = "All" | "Active" | IssueStatus;
+
 function Badge({
   label,
   color,
@@ -53,7 +55,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   const [issues, setIssues] = useState<Issue[]>(initialIssues);
   const [view, setView] = useState<"list" | "aging">("list");
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>("All");
   const [filterPriority, setFilterPriority] = useState("All");
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterPlatform, setFilterPlatform] = useState("All");
@@ -130,14 +132,21 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
           i.submitterName.toLowerCase().includes(q) ||
           i.category.toLowerCase().includes(q) ||
           i.platform.toLowerCase().includes(q);
+
         const matchStatus =
-          filterStatus === "All" || i.status === filterStatus;
+          filterStatus === "All"
+            ? true
+            : filterStatus === "Active"
+            ? i.status !== "Resolved"
+            : i.status === filterStatus;
+
         const matchPriority =
           filterPriority === "All" || i.priority === filterPriority;
         const matchCategory =
           filterCategory === "All" || i.category === filterCategory;
         const matchPlatform =
           filterPlatform === "All" || i.platform === filterPlatform;
+
         return (
           matchSearch &&
           matchStatus &&
@@ -169,14 +178,21 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     sortBy,
   ]);
 
-  const openIssues = issues.filter((i) => i.status !== "Resolved");
+  const activeIssues = issues.filter((i) => i.status !== "Resolved");
   const resolvedIssues = issues.filter((i) => i.status === "Resolved");
-  const avgAge = openIssues.length
+  const avgAge = activeIssues.length
     ? Math.round(
-        openIssues.reduce((s, i) => s + daysSince(i.createdAt), 0) /
-          openIssues.length
+        activeIssues.reduce((s, i) => s + daysSince(i.createdAt), 0) /
+          activeIssues.length
       )
     : 0;
+
+  const goToFilteredList = (status: StatusFilter) => {
+    setView("list");
+    setSelectedIssue(null);
+    setShowForm(false);
+    setFilterStatus(status);
+  };
 
   const submitIssue = async () => {
     if (
@@ -362,11 +378,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                 <Badge label="You voted" color="#155eef" bg="#dfeafe" />
               ) : null}
               {issue.notifyOnResolve.includes(currentUser.email) ? (
-                <Badge
-                  label="Following"
-                  color="#027a48"
-                  bg="#ecfdf3"
-                />
+                <Badge label="Following" color="#027a48" bg="#ecfdf3" />
               ) : null}
             </div>
 
@@ -500,10 +512,13 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
               <select
                 className="select"
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                onChange={(e) =>
+                  setFilterStatus(e.target.value as StatusFilter)
+                }
                 style={{ width: 160 }}
               >
                 <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
                 {STATUSES.map((o) => (
                   <option key={o}>{o}</option>
                 ))}
@@ -1008,29 +1023,79 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
       {view === "aging" ? (
         <div>
           <div className="grid-3" style={{ marginBottom: 16 }}>
-            {[
-              ["Open issues", String(openIssues.length), "#155eef", "#eff8ff"],
-              ["Avg age (days)", String(avgAge), "#b54708", "#fffaeb"],
-              ["Resolved", String(resolvedIssues.length), "#067647", "#ecfdf3"],
-            ].map(([label, value, color, background]) => (
-              <div
-                key={label}
-                className="card"
-                style={{ padding: 16, background: String(background) }}
+            <button
+              type="button"
+              className="card"
+              onClick={() => goToFilteredList("Active")}
+              style={{
+                padding: 16,
+                background: "#eff8ff",
+                textAlign: "left",
+                border: "1px solid #b2ddff",
+                cursor: "pointer",
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  color: "#155eef",
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
               >
-                <p
-                  style={{
-                    margin: 0,
-                    color: String(color),
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  {label}
-                </p>
-                <h2 style={{ margin: "8px 0 0", fontSize: 28 }}>{value}</h2>
-              </div>
-            ))}
+                Open issues
+              </p>
+              <h2 style={{ margin: "8px 0 0", fontSize: 28 }}>
+                {activeIssues.length}
+              </h2>
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#475467" }}>
+                Click to view all open and in-progress issues
+              </p>
+            </button>
+
+            <div className="card" style={{ padding: 16, background: "#fffaeb" }}>
+              <p
+                style={{
+                  margin: 0,
+                  color: "#b54708",
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                Avg age (days)
+              </p>
+              <h2 style={{ margin: "8px 0 0", fontSize: 28 }}>{avgAge}</h2>
+            </div>
+
+            <button
+              type="button"
+              className="card"
+              onClick={() => goToFilteredList("Resolved")}
+              style={{
+                padding: 16,
+                background: "#ecfdf3",
+                textAlign: "left",
+                border: "1px solid #abefc6",
+                cursor: "pointer",
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  color: "#067647",
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                Resolved
+              </p>
+              <h2 style={{ margin: "8px 0 0", fontSize: 28 }}>
+                {resolvedIssues.length}
+              </h2>
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#475467" }}>
+                Click to view all resolved issues
+              </p>
+            </button>
           </div>
 
           <div className="card" style={{ padding: 18 }}>
@@ -1047,14 +1112,18 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {openIssues
+                  {activeIssues
                     .sort(
                       (a, b) => daysSince(b.createdAt) - daysSince(a.createdAt)
                     )
                     .map((issue) => (
                       <tr
                         key={issue.id}
-                        style={{ borderTop: "1px solid #eaecf0" }}
+                        style={{ borderTop: "1px solid #eaecf0", cursor: "pointer" }}
+                        onClick={() => {
+                          setView("list");
+                          setSelectedIssue(issue);
+                        }}
                       >
                         <td style={{ padding: "12px 8px", fontWeight: 600 }}>
                           {issue.title}
