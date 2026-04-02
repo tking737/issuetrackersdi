@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/server-auth";
-import { getIssueById, updateIssueStatus } from "@/lib/firestore";
-import { sendResolvedEmails } from "@/lib/graph";
+import { getIssueById, updateIssueFollowers } from "@/lib/firestore";
+import { sendAddedSubscriberEmail } from "@/lib/graph";
 
 export async function POST(
   request: Request,
@@ -12,34 +12,51 @@ export async function POST(
 
     if (!user.isAdmin) {
       return NextResponse.json(
-        { error: "Only admins can change issue status." },
+        { error: "Only admins can manage subscribers." },
         { status: 403 }
       );
     }
 
-    const { status } = await request.json();
     const { id } = await params;
+    const existingIssue = await getIssueById(id);
 
-    const issue = await updateIssueStatus(id, status);
-    let notified = 0;
+    const { followers } = await request.json();
 
-    if (status === "Resolved") {
-      const recipients = Array.from(
-        new Set([issue.submitter, ...issue.notifyOnResolve])
+    if (!Array.isArray(followers)) {
+      return NextResponse.json(
+        { error: "Invalid followers list." },
+        { status: 400 }
       );
+    }
 
-      notified = await sendResolvedEmails({
-        recipients,
-        issueTitle: issue.title,
-        issueId: issue.id,
+    const normalizedFollowers = Array.from(
+      new Set(
+        followers
+          .map((value: unknown) => String(value || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+
+    const newlyAdded = normalizedFollowers.filter(
+      (email) => !existingIssue.notifyOnResolve.includes(email)
+    );
+
+    await updateIssueFollowers(id, normalizedFollowers);
+    const updated = await getIssueById(id);
+
+    for (const email of newlyAdded) {
+      await sendAddedSubscriberEmail({
+        recipient: email,
+        issueTitle: updated.title,
+        issueId: updated.id,
+        addedBy: user.email,
       });
     }
 
-    const fresh = await getIssueById(id);
-    return NextResponse.json({ issue: fresh, notified });
+    return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Unable to update issue status." },
+      { error: error.message || "Failed to update followers." },
       { status: 500 }
     );
   }

@@ -46,28 +46,19 @@ function getBaseUrl(appUrl?: string) {
   ).replace(/\/+$/, "");
 }
 
-export async function sendResolvedEmails(options: {
-  recipients: string[];
-  issueTitle: string;
-  issueId: string;
-  appUrl?: string;
+async function sendMail(options: {
+  to: string[];
+  subject: string;
+  html: string;
 }) {
   const recipients = Array.from(
-    new Set(
-      options.recipients
-        .map((value) => value.trim().toLowerCase())
-        .filter(Boolean)
-    )
+    new Set(options.to.map((value) => value.trim().toLowerCase()).filter(Boolean))
   );
 
   if (!recipients.length) return 0;
 
   const { sender } = getGraphConfig();
   const accessToken = await getGraphAccessToken();
-
-  const issueUrl = `${getBaseUrl(options.appUrl)}/?issue=${encodeURIComponent(
-    options.issueId
-  )}`;
 
   let sent = 0;
 
@@ -84,10 +75,10 @@ export async function sendResolvedEmails(options: {
         },
         body: JSON.stringify({
           message: {
-            subject: `Resolved: ${options.issueTitle}`,
+            subject: options.subject,
             body: {
               contentType: "HTML",
-              content: `<p>Your issue <strong>${options.issueTitle}</strong> has been marked as resolved.</p><p><a href="${issueUrl}">Open the ticket</a></p>`,
+              content: options.html,
             },
             toRecipients: [{ emailAddress: { address: recipient } }],
           },
@@ -100,6 +91,23 @@ export async function sendResolvedEmails(options: {
   }
 
   return sent;
+}
+
+export async function sendResolvedEmails(options: {
+  recipients: string[];
+  issueTitle: string;
+  issueId: string;
+  appUrl?: string;
+}) {
+  const issueUrl = `${getBaseUrl(options.appUrl)}/?issue=${encodeURIComponent(
+    options.issueId
+  )}`;
+
+  return sendMail({
+    to: options.recipients,
+    subject: `Resolved: ${options.issueTitle}`,
+    html: `<p>Your issue <strong>${options.issueTitle}</strong> has been marked as resolved.</p><p><a href="${issueUrl}">Open the ticket</a></p>`,
+  });
 }
 
 export async function sendNewIssueEmails(options: {
@@ -115,42 +123,31 @@ export async function sendNewIssueEmails(options: {
 
   if (!adminEmails.length) return 0;
 
-  const { sender } = getGraphConfig();
-  const accessToken = await getGraphAccessToken();
-
   const issueUrl = `${getBaseUrl(options.appUrl)}/?issue=${encodeURIComponent(
     options.issueId
   )}`;
 
-  let sent = 0;
+  return sendMail({
+    to: adminEmails,
+    subject: `New Issue: ${options.issueTitle}`,
+    html: `<p>A new issue has been reported.</p><p><strong>Title:</strong> ${options.issueTitle}</p><p><strong>Submitted by:</strong> ${options.submitter}</p><p><a href="${issueUrl}">Open the ticket</a></p>`,
+  });
+}
 
-  for (const recipient of adminEmails) {
-    const mailRes = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(
-        sender
-      )}/sendMail`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: {
-            subject: `New Issue: ${options.issueTitle}`,
-            body: {
-              contentType: "HTML",
-              content: `<p>A new issue has been reported.</p><p><strong>Title:</strong> ${options.issueTitle}</p><p><strong>Submitted by:</strong> ${options.submitter}</p><p><a href="${issueUrl}">Open the ticket</a></p>`,
-            },
-            toRecipients: [{ emailAddress: { address: recipient } }],
-          },
-          saveToSentItems: true,
-        }),
-      }
-    );
+export async function sendAddedSubscriberEmail(options: {
+  recipient: string;
+  issueTitle: string;
+  issueId: string;
+  addedBy: string;
+  appUrl?: string;
+}) {
+  const issueUrl = `${getBaseUrl(options.appUrl)}/?issue=${encodeURIComponent(
+    options.issueId
+  )}`;
 
-    if (mailRes.ok) sent += 1;
-  }
-
-  return sent;
+  return sendMail({
+    to: [options.recipient],
+    subject: `You were added as a subscriber: ${options.issueTitle}`,
+    html: `<p>You were added as a subscriber to the issue <strong>${options.issueTitle}</strong>.</p><p><strong>Added by:</strong> ${options.addedBy}</p><p>You will receive updates when this issue is resolved.</p><p><a href="${issueUrl}">Open the ticket</a></p>`,
+  });
 }
