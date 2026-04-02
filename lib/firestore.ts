@@ -1,6 +1,15 @@
 import { randomUUID } from "crypto";
 import { adminDb, adminStorage } from "@/lib/firebase/admin";
-import { AttachmentItem, CommentItem, Issue, IssueCategory, IssuePlatform, IssuePriority, IssueStatus, UserSession } from "@/lib/types";
+import {
+  AttachmentItem,
+  CommentItem,
+  Issue,
+  IssueCategory,
+  IssuePlatform,
+  IssuePriority,
+  IssueStatus,
+  UserSession,
+} from "@/lib/types";
 
 const issuesCollection = adminDb.collection("issues");
 
@@ -17,11 +26,17 @@ function mapIssue(id: string, data: FirebaseFirestore.DocumentData): Issue {
     description: String(data.description || ""),
     votes: Array.isArray(data.voters) ? data.voters.length : 0,
     voters: Array.isArray(data.voters) ? data.voters : [],
-    comments: Array.isArray(data.comments) ? data.comments as CommentItem[] : [],
-    attachments: Array.isArray(data.attachments) ? data.attachments as AttachmentItem[] : [],
+    comments: Array.isArray(data.comments)
+      ? (data.comments as CommentItem[])
+      : [],
+    attachments: Array.isArray(data.attachments)
+      ? (data.attachments as AttachmentItem[])
+      : [],
     createdAt: String(data.createdAt || new Date().toISOString()),
     resolvedAt: data.resolvedAt ? String(data.resolvedAt) : null,
-    notifyOnResolve: Array.isArray(data.notifyOnResolve) ? data.notifyOnResolve : [],
+    notifyOnResolve: Array.isArray(data.notifyOnResolve)
+      ? data.notifyOnResolve
+      : [],
   };
 }
 
@@ -73,7 +88,10 @@ function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
-export async function uploadAttachment(issueId: string, file: File): Promise<AttachmentItem> {
+export async function uploadAttachment(
+  issueId: string,
+  file: File
+): Promise<AttachmentItem> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   const path = `issues/${issueId}/${Date.now()}-${sanitizeFilename(file.name)}`;
@@ -129,11 +147,14 @@ export async function toggleVote(issueId: string, email: string) {
 export async function toggleSubscription(issueId: string, email: string) {
   const ref = issuesCollection.doc(issueId);
   let subscribed = false;
+
   await adminDb.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new Error("Issue not found.");
     const data = snap.data()!;
-    const values = Array.isArray(data.notifyOnResolve) ? [...data.notifyOnResolve] : [];
+    const values = Array.isArray(data.notifyOnResolve)
+      ? [...data.notifyOnResolve]
+      : [];
     const index = values.indexOf(email);
     if (index >= 0) {
       values.splice(index, 1);
@@ -144,6 +165,7 @@ export async function toggleSubscription(issueId: string, email: string) {
     }
     tx.update(ref, { notifyOnResolve: values });
   });
+
   return { subscribed, issue: await getIssueById(issueId) };
 }
 
@@ -155,6 +177,7 @@ export async function addComment(issueId: string, author: string, text: string) 
     text,
     date: new Date().toISOString(),
   };
+
   await adminDb.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new Error("Issue not found.");
@@ -163,6 +186,7 @@ export async function addComment(issueId: string, author: string, text: string) 
     comments.push(comment);
     tx.update(ref, { comments });
   });
+
   return getIssueById(issueId);
 }
 

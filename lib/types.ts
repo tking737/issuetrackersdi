@@ -1,7 +1,15 @@
 export type IssueStatus = "Open" | "In Progress" | "Resolved";
 export type IssuePriority = "Low" | "Medium" | "High" | "Critical";
-export type IssueCategory = "Bug" | "Performance" | "Feature Request" | "Question" | "Other";
-export type IssuePlatform = "Sage Intacct" | "Sage Paperless" | "Credit Cards";
+export type IssueCategory =
+  | "Bug"
+  | "Performance"
+  | "Feature Request"
+  | "Question"
+  | "Other";
+export type IssuePlatform =
+  | "Sage Intacct"
+  | "Sage Paperless"
+  | "Credit Cards";
 
 export type CommentItem = {
   id: string;

@@ -137,8 +137,8 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
           filterStatus === "All"
             ? true
             : filterStatus === "Active"
-            ? i.status !== "Resolved"
-            : i.status === filterStatus;
+              ? i.status !== "Resolved"
+              : i.status === filterStatus;
 
         const matchPriority =
           filterPriority === "All" || i.priority === filterPriority;
@@ -160,10 +160,14 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
         const bResolved = b.status === "Resolved" ? 1 : 0;
         if (aResolved !== bResolved) return aResolved - bResolved;
         if (sortBy === "votes") return b.votes - a.votes;
-        if (sortBy === "priority")
-          return PRIORITIES.indexOf(b.priority) - PRIORITIES.indexOf(a.priority);
-        if (sortBy === "aging")
+        if (sortBy === "priority") {
+          return (
+            PRIORITIES.indexOf(b.priority) - PRIORITIES.indexOf(a.priority)
+          );
+        }
+        if (sortBy === "aging") {
           return daysSince(b.createdAt) - daysSince(a.createdAt);
+        }
         return (
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
@@ -192,6 +196,35 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     setSelectedIssue(null);
     setShowForm(false);
     setFilterStatus(status);
+  };
+
+  const getAvailableUsers = (issue: Issue) => {
+    return Array.from(
+      new Set([issue.submitter, ...issue.voters, ...issue.notifyOnResolve])
+    ).sort((a, b) => a.localeCompare(b));
+  };
+
+  const updateFollowers = async (issueId: string, followers: string[]) => {
+    setBusyAction(`followers-${issueId}`);
+
+    const res = await authorizedFetch(`/api/issues/${issueId}/followers`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ followers }),
+    });
+
+    setBusyAction(null);
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      showNotif(data?.error || "Failed to update subscribers.", "error");
+      return;
+    }
+
+    await refreshIssue(issueId);
+    showNotif("Subscribers updated.");
   };
 
   const submitIssue = async () => {
@@ -987,32 +1020,78 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
             {currentUser.isAdmin && (
               <div className="card" style={{ padding: 22, height: "fit-content" }}>
                 <h3 style={{ marginTop: 0 }}>Admin actions</h3>
-                <p style={{ color: "#667085", lineHeight: 1.6 }}>
-                  Only admins can change issue status.
-                </p>
 
-                <div style={{ display: "grid", gap: 8 }}>
-                  {STATUSES.map((st) => (
-                    <button
-                      key={st}
-                      className="btn"
-                      onClick={() => void changeStatus(liveSelected.id, st)}
-                      disabled={busyAction === `status-${liveSelected.id}`}
-                      style={{
-                        justifyContent: "flex-start",
-                        background:
-                          liveSelected.status === st ? statusBg[st] : undefined,
-                        color:
-                          liveSelected.status === st ? statusColor[st] : undefined,
-                        borderColor:
-                          liveSelected.status === st
-                            ? statusColor[st]
-                            : undefined,
-                      }}
-                    >
-                      {st}
-                    </button>
-                  ))}
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ fontWeight: 700, marginTop: 0 }}>Change status</p>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {STATUSES.map((st) => (
+                      <button
+                        key={st}
+                        className="btn"
+                        onClick={() => void changeStatus(liveSelected.id, st)}
+                        disabled={busyAction === `status-${liveSelected.id}`}
+                        style={{
+                          justifyContent: "flex-start",
+                          background:
+                            liveSelected.status === st
+                              ? statusBg[st]
+                              : undefined,
+                          color:
+                            liveSelected.status === st
+                              ? statusColor[st]
+                              : undefined,
+                          borderColor:
+                            liveSelected.status === st
+                              ? statusColor[st]
+                              : undefined,
+                        }}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p style={{ fontWeight: 700, marginTop: 0 }}>
+                    Manage subscribers
+                  </p>
+                  <p style={{ color: "#667085", fontSize: 13, marginTop: 0 }}>
+                    Add or remove people who should receive updates when this issue is resolved.
+                  </p>
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {getAvailableUsers(liveSelected).map((email) => {
+                      const isSelected =
+                        liveSelected.notifyOnResolve.includes(email);
+
+                      return (
+                        <button
+                          key={email}
+                          className="btn"
+                          onClick={() => {
+                            const next = isSelected
+                              ? liveSelected.notifyOnResolve.filter(
+                                  (e) => e !== email
+                                )
+                              : [...liveSelected.notifyOnResolve, email];
+
+                            void updateFollowers(liveSelected.id, next);
+                          }}
+                          disabled={busyAction === `followers-${liveSelected.id}`}
+                          style={{
+                            justifyContent: "space-between",
+                            background: isSelected ? "#ecfdf3" : undefined,
+                            color: isSelected ? "#027a48" : undefined,
+                            borderColor: isSelected ? "#abefc6" : undefined,
+                          }}
+                        >
+                          <span>{email}</span>
+                          <span>{isSelected ? "✓ Subscriber" : "+ Add"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
@@ -1119,7 +1198,10 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                     .map((issue) => (
                       <tr
                         key={issue.id}
-                        style={{ borderTop: "1px solid #eaecf0", cursor: "pointer" }}
+                        style={{
+                          borderTop: "1px solid #eaecf0",
+                          cursor: "pointer",
+                        }}
                         onClick={() => {
                           setView("list");
                           setSelectedIssue(issue);
