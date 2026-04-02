@@ -1,6 +1,12 @@
+import { sendNewIssueEmails } from "@/lib/graph";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/server-auth";
-import { createIssue, getIssueById, listIssues, uploadAttachment } from "@/lib/firestore";
+import {
+  createIssue,
+  getIssueById,
+  listIssues,
+  uploadAttachment,
+} from "@/lib/firestore";
 import { PLATFORMS } from "@/lib/constants";
 
 export async function GET(request: Request) {
@@ -9,7 +15,10 @@ export async function GET(request: Request) {
     const issues = await listIssues();
     return NextResponse.json(issues);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: error.message || "Unauthorized" },
+      { status: 401 }
+    );
   }
 }
 
@@ -26,11 +35,17 @@ export async function POST(request: Request) {
     const description = String(form.get("description") || "").trim();
 
     if (!title || !submitterName) {
-      return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required fields." },
+        { status: 400 }
+      );
     }
 
     if (!PLATFORMS.includes(platform as any)) {
-      return NextResponse.json({ error: "Please choose a valid platform." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please choose a valid platform." },
+        { status: 400 }
+      );
     }
 
     const tmpIssue = await createIssue({
@@ -45,20 +60,38 @@ export async function POST(request: Request) {
       attachments: [],
     });
 
-    const files = form.getAll("attachments").filter((value): value is File => value instanceof File && value.size > 0);
-    const attachments = [] as Awaited<ReturnType<typeof uploadAttachment>>[];
+    const files = form
+      .getAll("attachments")
+      .filter(
+        (value): value is File => value instanceof File && value.size > 0
+      );
+
+    const attachments: Awaited<ReturnType<typeof uploadAttachment>>[] = [];
+
     for (const file of files) {
       attachments.push(await uploadAttachment(tmpIssue.id, file));
     }
 
     if (attachments.length) {
       const { adminDb } = await import("@/lib/firebase/admin");
-      await adminDb.collection("issues").doc(tmpIssue.id).update({ attachments });
+      await adminDb.collection("issues").doc(tmpIssue.id).update({
+        attachments,
+      });
     }
 
     const issue = await getIssueById(tmpIssue.id);
+
+    await sendNewIssueEmails({
+      issueTitle: issue.title,
+      issueId: issue.id,
+      submitter: issue.submitterName,
+    });
+
     return NextResponse.json(issue, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to create issue." }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Failed to create issue." },
+      { status: 500 }
+    );
   }
 }
