@@ -21,6 +21,7 @@ import {
 import { daysSince, formatDate, initials } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { auth } from "@/lib/firebase/client";
+import { isAllowedEmail, allowedDomainsLabel } from "@/lib/auth-config";
 
 type Props = {
   initialIssues: Issue[];
@@ -64,6 +65,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   const [newComment, setNewComment] = useState("");
   const [notification, setNotification] = useState<Notification | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [adminSubscriberEmail, setAdminSubscriberEmail] = useState("");
   const [form, setForm] = useState({
     title: "",
     category: "Bug",
@@ -198,12 +200,6 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     setFilterStatus(status);
   };
 
-  const getAvailableUsers = (issue: Issue) => {
-    return Array.from(
-      new Set([issue.submitter, ...issue.voters, ...issue.notifyOnResolve])
-    ).sort((a, b) => a.localeCompare(b));
-  };
-
   const updateFollowers = async (issueId: string, followers: string[]) => {
     setBusyAction(`followers-${issueId}`);
 
@@ -220,11 +216,47 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       showNotif(data?.error || "Failed to update subscribers.", "error");
-      return;
+      return false;
     }
 
     await refreshIssue(issueId);
-    showNotif("Subscribers updated.");
+    return true;
+  };
+
+  const addAdminSubscriber = async (issue: Issue) => {
+    const email = adminSubscriberEmail.trim().toLowerCase();
+
+    if (!email) {
+      showNotif("Enter an email address to add.", "error");
+      return;
+    }
+
+    if (!isAllowedEmail(email)) {
+      showNotif(
+        `Only these email domains are allowed: ${allowedDomainsLabel()}`,
+        "error"
+      );
+      return;
+    }
+
+    if (issue.notifyOnResolve.includes(email)) {
+      showNotif("That user is already subscribed.", "error");
+      return;
+    }
+
+    const ok = await updateFollowers(issue.id, [...issue.notifyOnResolve, email]);
+    if (ok) {
+      setAdminSubscriberEmail("");
+      showNotif("Subscriber added.");
+    }
+  };
+
+  const removeAdminSubscriber = async (issue: Issue, email: string) => {
+    const next = issue.notifyOnResolve.filter((value) => value !== email);
+    const ok = await updateFollowers(issue.id, next);
+    if (ok) {
+      showNotif("Subscriber removed.");
+    }
   };
 
   const submitIssue = async () => {
@@ -1057,41 +1089,74 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                     Manage subscribers
                   </p>
                   <p style={{ color: "#667085", fontSize: 13, marginTop: 0 }}>
-                    Add or remove people who should receive updates when this issue is resolved.
+                    Add any valid company email or remove existing subscribers.
                   </p>
 
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {getAvailableUsers(liveSelected).map((email) => {
-                      const isSelected =
-                        liveSelected.notifyOnResolve.includes(email);
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <input
+                      className="field"
+                      type="email"
+                      value={adminSubscriberEmail}
+                      onChange={(e) => setAdminSubscriberEmail(e.target.value)}
+                      placeholder={`Enter subscriber email (${allowedDomainsLabel()})`}
+                    />
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => void addAdminSubscriber(liveSelected)}
+                      disabled={busyAction === `followers-${liveSelected.id}`}
+                    >
+                      Add
+                    </button>
+                  </div>
 
-                      return (
-                        <button
+                  {liveSelected.notifyOnResolve.length === 0 ? (
+                    <p style={{ color: "#667085", fontSize: 13 }}>
+                      No subscribers yet.
+                    </p>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {liveSelected.notifyOnResolve.map((email) => (
+                        <div
                           key={email}
-                          className="btn"
-                          onClick={() => {
-                            const next = isSelected
-                              ? liveSelected.notifyOnResolve.filter(
-                                  (e) => e !== email
-                                )
-                              : [...liveSelected.notifyOnResolve, email];
-
-                            void updateFollowers(liveSelected.id, next);
-                          }}
-                          disabled={busyAction === `followers-${liveSelected.id}`}
                           style={{
-                            justifyContent: "space-between",
-                            background: isSelected ? "#ecfdf3" : undefined,
-                            color: isSelected ? "#027a48" : undefined,
-                            borderColor: isSelected ? "#abefc6" : undefined,
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "center",
                           }}
                         >
-                          <span>{email}</span>
-                          <span>{isSelected ? "✓ Subscriber" : "+ Add"}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <div
+                            className="btn"
+                            style={{
+                              flex: 1,
+                              justifyContent: "space-between",
+                              background: "#ecfdf3",
+                              color: "#027a48",
+                              borderColor: "#abefc6",
+                              cursor: "default",
+                            }}
+                          >
+                            <span>{email}</span>
+                            <span>Subscriber</span>
+                          </div>
+
+                          <button
+                            className="btn"
+                            onClick={() =>
+                              void removeAdminSubscriber(liveSelected, email)
+                            }
+                            disabled={busyAction === `followers-${liveSelected.id}`}
+                            style={{
+                              color: "#b42318",
+                              borderColor: "#fecdca",
+                              background: "#fef3f2",
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
