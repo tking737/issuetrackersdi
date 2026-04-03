@@ -451,18 +451,16 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   };
 
   const submitIssue = async () => {
-    if (
-      !form.title.trim() ||
-      !form.submitterName.trim() ||
-      !form.submitter.trim()
-    ) {
-      showNotif("Please fill in all required fields.", "error");
+    const title = form.title.trim();
+
+    if (!title || !form.submitterName.trim() || !form.submitter.trim()) {
+      showNotif("Please fill in all required fields. Title is required.", "error");
       return;
     }
 
     setBusyAction("submit");
     const payload = new FormData();
-    payload.set("title", form.title);
+    payload.set("title", title);
     payload.set("category", form.category);
     payload.set("platform", form.platform);
     payload.set("priority", form.priority);
@@ -984,15 +982,27 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
               </div>
 
               <div style={{ marginTop: 12 }}>
-                <label className="label">Issue title</label>
+                <label className="label">
+                  Issue title <span style={{ color: "#b42318" }}>*</span>
+                </label>
                 <input
                   className="field"
                   value={form.title}
+                  required
                   onChange={(e) =>
                     setForm((f) => ({ ...f, title: e.target.value }))
                   }
                   placeholder="Brief description of the problem"
                 />
+                <p
+                  style={{
+                    margin: "6px 0 0",
+                    fontSize: 12,
+                    color: "#667085",
+                  }}
+                >
+                  Title is required.
+                </p>
               </div>
 
               <div
@@ -1110,7 +1120,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                 <button
                   className="btn btn-primary"
                   onClick={submitIssue}
-                  disabled={busyAction === "submit"}
+                  disabled={busyAction === "submit" || !form.title.trim()}
                 >
                   {busyAction === "submit" ? "Submitting..." : "Submit issue"}
                 </button>
