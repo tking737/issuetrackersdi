@@ -198,6 +198,8 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   });
   const [sortBy, setSortBy] = useState("createdAt");
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState("");
+  const [shakeTitle, setShakeTitle] = useState(false);
 
   useEffect(() => setIssues(initialIssues), [initialIssues]);
 
@@ -237,6 +239,17 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
       () => setNotification(null),
       3500
     );
+  };
+
+  const triggerTitleValidationError = () => {
+    setTitleError("Title is required to submit an issue.");
+    setShakeTitle(true);
+    const titleInput = document.getElementById("issue-title-input") as
+      | HTMLInputElement
+      | null;
+    titleInput?.focus();
+    titleInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => setShakeTitle(false), 350);
   };
 
   const authorizedFetch = async (
@@ -453,8 +466,14 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   const submitIssue = async () => {
     const title = form.title.trim();
 
-    if (!title || !form.submitterName.trim() || !form.submitter.trim()) {
-      showNotif("Please fill in all required fields. Title is required.", "error");
+    if (!title) {
+      triggerTitleValidationError();
+      showNotif("Cannot submit because Title is required.", "error");
+      return;
+    }
+
+    if (!form.submitterName.trim() || !form.submitter.trim()) {
+      showNotif("Please fill in all required fields.", "error");
       return;
     }
 
@@ -494,6 +513,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     });
     setFiles([]);
     setShowForm(false);
+    setTitleError("");
     showNotif("Issue submitted successfully.");
   };
 
@@ -697,6 +717,17 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
 
   return (
     <main className="container">
+      <style>{`
+        @keyframes issueTitleShake {
+          0% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
+          100% { transform: translateX(0); }
+        }
+      `}</style>
+
       {previewAttachment ? (
         <div
           onClick={() => setPreviewAttachment(null)}
@@ -986,23 +1017,49 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   Issue title <span style={{ color: "#b42318" }}>*</span>
                 </label>
                 <input
+                  id="issue-title-input"
                   className="field"
                   value={form.title}
                   required
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, title: e.target.value }))
-                  }
-                  placeholder="Brief description of the problem"
-                />
-                <p
-                  style={{
-                    margin: "6px 0 0",
-                    fontSize: 12,
-                    color: "#667085",
+                  onChange={(e) => {
+                    const nextTitle = e.target.value;
+                    setForm((f) => ({ ...f, title: nextTitle }));
+                    if (nextTitle.trim()) {
+                      setTitleError("");
+                    }
                   }}
-                >
-                  Title is required.
-                </p>
+                  placeholder="Brief description of the problem"
+                  aria-invalid={!!titleError}
+                  style={{
+                    borderColor: titleError ? "#f04438" : undefined,
+                    background: titleError ? "#fef3f2" : undefined,
+                    animation: shakeTitle
+                      ? "issueTitleShake 0.35s ease-in-out"
+                      : undefined,
+                  }}
+                />
+                {titleError ? (
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 12,
+                      color: "#f04438",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {titleError}
+                  </p>
+                ) : (
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 12,
+                      color: "#667085",
+                    }}
+                  >
+                    Title is required.
+                  </p>
+                )}
               </div>
 
               <div
