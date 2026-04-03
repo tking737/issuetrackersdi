@@ -13,12 +13,18 @@ import {
   statusColor,
 } from "@/lib/constants";
 import {
+  AttachmentItem,
   Issue,
   IssuePlatform,
   IssueStatus,
   UserSession,
 } from "@/lib/types";
-import { daysSince, formatDate, initials } from "@/lib/utils";
+import {
+  daysSince,
+  formatDate,
+  initials,
+  isImageAttachment,
+} from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { auth } from "@/lib/firebase/client";
 import { isAllowedEmail, allowedDomainsLabel } from "@/lib/auth-config";
@@ -33,7 +39,11 @@ type Notification = {
   type: "success" | "error";
 };
 
-type StatusFilter = "All" | "Active" | IssueStatus;
+type StatusChecks = {
+  open: boolean;
+  inProgress: boolean;
+  resolved: boolean;
+};
 
 function Badge({
   label,
@@ -51,21 +61,129 @@ function Badge({
   );
 }
 
+function AttachmentGallery({
+  attachments,
+  onPreview,
+}: {
+  attachments: AttachmentItem[];
+  onPreview: (attachment: AttachmentItem) => void;
+}) {
+  if (!attachments.length) return null;
+
+  const images = attachments.filter(isImageAttachment);
+  const files = attachments.filter((attachment) => !isImageAttachment(attachment));
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {images.length ? (
+        <div>
+          <p
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#344054",
+              margin: "0 0 8px",
+            }}
+          >
+            Images
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+              gap: 10,
+            }}
+          >
+            {images.map((attachment) => (
+              <button
+                key={attachment.path}
+                type="button"
+                onClick={() => onPreview(attachment)}
+                style={{
+                  border: "1px solid #eaecf0",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  background: "#fff",
+                  padding: 0,
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <img
+                  src={attachment.url}
+                  alt={attachment.name}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    height: 140,
+                    objectFit: "cover",
+                    background: "#f2f4f7",
+                  }}
+                />
+                <div style={{ padding: 8, fontSize: 12, color: "#475467" }}>
+                  {attachment.name}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {files.length ? (
+        <div>
+          <p
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#344054",
+              margin: "0 0 8px",
+            }}
+          >
+            Files
+          </p>
+          <div style={{ display: "grid", gap: 8 }}>
+            {files.map((attachment) => (
+              <a
+                key={attachment.path}
+                href={attachment.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn"
+                style={{ justifyContent: "flex-start" }}
+              >
+                {attachment.name}
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   const searchParams = useSearchParams();
   const [issues, setIssues] = useState<Issue[]>(initialIssues);
   const [view, setView] = useState<"list" | "aging">("list");
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<StatusFilter>("All");
+  const [statusChecks, setStatusChecks] = useState<StatusChecks>({
+    open: true,
+    inProgress: true,
+    resolved: false,
+  });
   const [filterPriority, setFilterPriority] = useState("All");
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterPlatform, setFilterPlatform] = useState("All");
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [newComment, setNewComment] = useState("");
+  const [commentFiles, setCommentFiles] = useState<File[]>([]);
   const [notification, setNotification] = useState<Notification | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [adminSubscriberEmail, setAdminSubscriberEmail] = useState("");
+  const [previewAttachment, setPreviewAttachment] = useState<AttachmentItem | null>(
+    null
+  );
   const [form, setForm] = useState({
     title: "",
     category: "Bug",
@@ -136,11 +254,9 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
           i.platform.toLowerCase().includes(q);
 
         const matchStatus =
-          filterStatus === "All"
-            ? true
-            : filterStatus === "Active"
-              ? i.status !== "Resolved"
-              : i.status === filterStatus;
+          (statusChecks.open && i.status === "Open") ||
+          (statusChecks.inProgress && i.status === "In Progress") ||
+          (statusChecks.resolved && i.status === "Resolved");
 
         const matchPriority =
           filterPriority === "All" || i.priority === filterPriority;
@@ -177,7 +293,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   }, [
     issues,
     search,
-    filterStatus,
+    statusChecks,
     filterPriority,
     filterCategory,
     filterPlatform,
@@ -193,11 +309,24 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
       )
     : 0;
 
-  const goToFilteredList = (status: StatusFilter) => {
+  const goToFilteredList = (status: "active" | "resolved") => {
     setView("list");
     setSelectedIssue(null);
     setShowForm(false);
-    setFilterStatus(status);
+
+    if (status === "active") {
+      setStatusChecks({
+        open: true,
+        inProgress: true,
+        resolved: false,
+      });
+    } else {
+      setStatusChecks({
+        open: false,
+        inProgress: false,
+        resolved: true,
+      });
+    }
   };
 
   const updateFollowers = async (issueId: string, followers: string[]) => {
@@ -323,18 +452,28 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
 
   const addComment = async (issueId: string) => {
     if (!newComment.trim()) return;
+
     setBusyAction(`comment-${issueId}`);
+
+    const payload = new FormData();
+    payload.set("body", newComment);
+    commentFiles.forEach((file) => payload.append("attachments", file));
+
     const res = await authorizedFetch(`/api/issues/${issueId}/comments`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: newComment }),
+      body: payload,
     });
+
     setBusyAction(null);
+
     if (!res.ok) {
-      showNotif("Failed to post comment.", "error");
+      const data = await res.json().catch(() => null);
+      showNotif(data?.error || "Failed to post comment.", "error");
       return;
     }
+
     setNewComment("");
+    setCommentFiles([]);
     await refreshIssue(issueId);
   };
 
@@ -385,6 +524,9 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) =>
     setFiles(Array.from(event.target.files || []));
+
+  const handleCommentFileChange = (event: ChangeEvent<HTMLInputElement>) =>
+    setCommentFiles(Array.from(event.target.files || []));
 
   const IssueCard = ({ issue }: { issue: Issue }) => {
     const age = daysSince(issue.createdAt);
@@ -495,6 +637,62 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
 
   return (
     <main className="container">
+      {previewAttachment ? (
+        <div
+          onClick={() => setPreviewAttachment(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(16, 24, 40, 0.82)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 1000,
+            padding: 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <img
+              src={previewAttachment.url}
+              alt={previewAttachment.name}
+              style={{
+                maxWidth: "90vw",
+                maxHeight: "80vh",
+                objectFit: "contain",
+                borderRadius: 12,
+                background: "#fff",
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                color: "#fff",
+                alignItems: "center",
+              }}
+            >
+              <span>{previewAttachment.name}</span>
+              <a
+                href={previewAttachment.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn"
+              >
+                Open original
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {notification ? (
         <div
           className="card"
@@ -566,72 +764,115 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
       {view === "list" && !liveSelected ? (
         <>
           <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 12 }}>
               <input
                 className="field"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search issues..."
-                style={{ flex: 1, minWidth: 220 }}
+                style={{ minWidth: 220 }}
               />
-              <select
-                className="select"
-                value={filterStatus}
-                onChange={(e) =>
-                  setFilterStatus(e.target.value as StatusFilter)
-                }
-                style={{ width: 160 }}
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
               >
-                <option value="All">All Statuses</option>
-                <option value="Active">Active</option>
-                {STATUSES.map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={filterPriority}
-                onChange={(e) => setFilterPriority(e.target.value)}
-                style={{ width: 160 }}
-              >
-                <option value="All">All Priorities</option>
-                {PRIORITIES.map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                style={{ width: 170 }}
-              >
-                <option value="All">All Categories</option>
-                {CATEGORIES.map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={filterPlatform}
-                onChange={(e) => setFilterPlatform(e.target.value)}
-                style={{ width: 180 }}
-              >
-                <option value="All">All Platforms</option>
-                {PLATFORMS.map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{ width: 150 }}
-              >
-                <option value="createdAt">Newest</option>
-                <option value="votes">Most votes</option>
-                <option value="priority">Priority</option>
-                <option value="aging">Oldest first</option>
-              </select>
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={statusChecks.open}
+                    onChange={(e) =>
+                      setStatusChecks((prev) => ({
+                        ...prev,
+                        open: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Open</span>
+                </label>
+
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={statusChecks.inProgress}
+                    onChange={(e) =>
+                      setStatusChecks((prev) => ({
+                        ...prev,
+                        inProgress: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>In Progress</span>
+                </label>
+
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={statusChecks.resolved}
+                    onChange={(e) =>
+                      setStatusChecks((prev) => ({
+                        ...prev,
+                        resolved: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Resolved</span>
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <select
+                  className="select"
+                  value={filterPriority}
+                  onChange={(e) => setFilterPriority(e.target.value)}
+                  style={{ width: 160 }}
+                >
+                  <option value="All">All Priorities</option>
+                  {PRIORITIES.map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="select"
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  style={{ width: 170 }}
+                >
+                  <option value="All">All Categories</option>
+                  {CATEGORIES.map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="select"
+                  value={filterPlatform}
+                  onChange={(e) => setFilterPlatform(e.target.value)}
+                  style={{ width: 180 }}
+                >
+                  <option value="All">All Platforms</option>
+                  {PLATFORMS.map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="select"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  style={{ width: 150 }}
+                >
+                  <option value="createdAt">Newest</option>
+                  <option value="votes">Most votes</option>
+                  <option value="priority">Priority</option>
+                  <option value="aging">Oldest first</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -896,20 +1137,10 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   >
                     Attachments
                   </p>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {liveSelected.attachments.map((attachment) => (
-                      <a
-                        key={attachment.path}
-                        href={attachment.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn"
-                        style={{ justifyContent: "flex-start" }}
-                      >
-                        {attachment.name}
-                      </a>
-                    ))}
-                  </div>
+                  <AttachmentGallery
+                    attachments={liveSelected.attachments}
+                    onPreview={setPreviewAttachment}
+                  />
                 </div>
               ) : null}
 
@@ -986,7 +1217,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                 {liveSelected.comments.map((c) => (
                   <div
                     key={c.id}
-                    style={{ display: "flex", gap: 10, marginBottom: 14 }}
+                    style={{ display: "flex", gap: 10, marginBottom: 18 }}
                   >
                     <div
                       style={{
@@ -998,12 +1229,13 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                         display: "grid",
                         placeItems: "center",
                         fontWeight: 700,
+                        flexShrink: 0,
                       }}
                     >
                       {initials(c.author)}
                     </div>
 
-                    <div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: "0 0 4px", fontWeight: 700 }}>
                         {c.author}{" "}
                         <span
@@ -1018,18 +1250,25 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                       </p>
                       <p
                         style={{
-                          margin: 0,
+                          margin: "0 0 8px",
                           color: "#344054",
                           lineHeight: 1.6,
                         }}
                       >
                         {c.text}
                       </p>
+
+                      {c.attachments?.length ? (
+                        <AttachmentGallery
+                          attachments={c.attachments}
+                          onPreview={setPreviewAttachment}
+                        />
+                      ) : null}
                     </div>
                   </div>
                 ))}
 
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "grid", gap: 8 }}>
                   <textarea
                     className="textarea"
                     value={newComment}
@@ -1037,14 +1276,54 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                     placeholder="Add a comment..."
                     style={{ minHeight: 84 }}
                   />
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => void addComment(liveSelected.id)}
-                    disabled={busyAction === `comment-${liveSelected.id}`}
-                    style={{ alignSelf: "flex-end" }}
-                  >
-                    Post
-                  </button>
+
+                  <div>
+                    <input
+                      className="field"
+                      type="file"
+                      multiple
+                      onChange={handleCommentFileChange}
+                    />
+                    <p
+                      style={{
+                        margin: "6px 0 0",
+                        fontSize: 12,
+                        color: "#667085",
+                      }}
+                    >
+                      You can attach images or files to your comment.
+                    </p>
+                  </div>
+
+                  {commentFiles.length ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                      }}
+                    >
+                      {commentFiles.map((file) => (
+                        <span
+                          key={`${file.name}-${file.size}`}
+                          className="badge"
+                          style={{ background: "#f2f4f7", color: "#344054" }}
+                        >
+                          {file.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => void addComment(liveSelected.id)}
+                      disabled={busyAction === `comment-${liveSelected.id}`}
+                    >
+                      Post
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1170,7 +1449,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
             <button
               type="button"
               className="card"
-              onClick={() => goToFilteredList("Active")}
+              onClick={() => goToFilteredList("active")}
               style={{
                 padding: 16,
                 background: "#eff8ff",
@@ -1214,7 +1493,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
             <button
               type="button"
               className="card"
-              onClick={() => goToFilteredList("Resolved")}
+              onClick={() => goToFilteredList("resolved")}
               style={{
                 padding: 16,
                 background: "#ecfdf3",

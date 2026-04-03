@@ -11,19 +11,20 @@ export type IssuePlatform =
   | "Sage Paperless"
   | "Credit Cards";
 
-export type CommentItem = {
-  id: string;
-  author: string;
-  text: string;
-  date: string;
-};
-
 export type AttachmentItem = {
   name: string;
   path: string;
   url: string;
   contentType: string | null;
   size: number | null;
+};
+
+export type CommentItem = {
+  id: string;
+  author: string;
+  text: string;
+  date: string;
+  attachments: AttachmentItem[];
 };
 
 export type Issue = {

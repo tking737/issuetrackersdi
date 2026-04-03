@@ -27,7 +27,12 @@ function mapIssue(id: string, data: FirebaseFirestore.DocumentData): Issue {
     votes: Array.isArray(data.voters) ? data.voters.length : 0,
     voters: Array.isArray(data.voters) ? data.voters : [],
     comments: Array.isArray(data.comments)
-      ? (data.comments as CommentItem[])
+      ? (data.comments as CommentItem[]).map((comment) => ({
+          ...comment,
+          attachments: Array.isArray(comment.attachments)
+            ? comment.attachments
+            : [],
+        }))
       : [],
     attachments: Array.isArray(data.attachments)
       ? (data.attachments as AttachmentItem[])
@@ -88,13 +93,12 @@ function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
-export async function uploadAttachment(
-  issueId: string,
+async function saveAttachmentToStorage(
+  path: string,
   file: File
 ): Promise<AttachmentItem> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const path = `issues/${issueId}/${Date.now()}-${sanitizeFilename(file.name)}`;
   const storageFile = adminStorage.file(path);
 
   await storageFile.save(buffer, {
@@ -116,6 +120,25 @@ export async function uploadAttachment(
     contentType: file.type || null,
     size: file.size || null,
   };
+}
+
+export async function uploadAttachment(
+  issueId: string,
+  file: File
+): Promise<AttachmentItem> {
+  const path = `issues/${issueId}/${Date.now()}-${sanitizeFilename(file.name)}`;
+  return saveAttachmentToStorage(path, file);
+}
+
+export async function uploadCommentAttachment(
+  issueId: string,
+  commentId: string,
+  file: File
+): Promise<AttachmentItem> {
+  const path = `issues/${issueId}/comments/${commentId}/${Date.now()}-${sanitizeFilename(
+    file.name
+  )}`;
+  return saveAttachmentToStorage(path, file);
 }
 
 export async function updateIssueFollowers(issueId: string, followers: string[]) {
@@ -169,13 +192,19 @@ export async function toggleSubscription(issueId: string, email: string) {
   return { subscribed, issue: await getIssueById(issueId) };
 }
 
-export async function addComment(issueId: string, author: string, text: string) {
+export async function addComment(
+  issueId: string,
+  author: string,
+  text: string,
+  attachments: AttachmentItem[] = []
+) {
   const ref = issuesCollection.doc(issueId);
   const comment: CommentItem = {
     id: randomUUID(),
     author,
     text,
     date: new Date().toISOString(),
+    attachments,
   };
 
   await adminDb.runTransaction(async (tx) => {
