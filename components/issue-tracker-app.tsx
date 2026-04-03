@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CATEGORIES,
   PLATFORMS,
@@ -162,7 +162,10 @@ function AttachmentGallery({
 }
 
 export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+
   const [issues, setIssues] = useState<Issue[]>(initialIssues);
   const [view, setView] = useState<"list" | "aging">("list");
   const [search, setSearch] = useState("");
@@ -197,6 +200,32 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
 
   useEffect(() => setIssues(initialIssues), [initialIssues]);
+
+  const updateUrlState = (next: {
+    view?: "list" | "aging";
+    issueId?: string | null;
+  }) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    const nextView = next.view ?? view;
+    const nextIssueId =
+      next.issueId === undefined ? selectedIssue?.id ?? null : next.issueId;
+
+    if (nextView && nextView !== "list") {
+      params.set("view", nextView);
+    } else {
+      params.delete("view");
+    }
+
+    if (nextIssueId) {
+      params.set("issue", nextIssueId);
+    } else {
+      params.delete("issue");
+    }
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   const showNotif = (
     msg: string,
@@ -233,7 +262,15 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
 
   useEffect(() => {
     const issueParam = searchParams.get("issue");
-    if (!issueParam) return;
+    const viewParam = searchParams.get("view");
+
+    setView(viewParam === "aging" ? "aging" : "list");
+
+    if (!issueParam) {
+      setSelectedIssue(null);
+      return;
+    }
+
     const found = issues.find((issue) => issue.id === issueParam);
     if (found) {
       setSelectedIssue(found);
@@ -327,6 +364,31 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
         resolved: true,
       });
     }
+
+    updateUrlState({ view: "list", issueId: null });
+  };
+
+  const openIssue = (issue: Issue) => {
+    setView("list");
+    setSelectedIssue(issue);
+    updateUrlState({ view: "list", issueId: issue.id });
+  };
+
+  const backToList = () => {
+    setSelectedIssue(null);
+    updateUrlState({ view: "list", issueId: null });
+  };
+
+  const goToAging = () => {
+    setView("aging");
+    setSelectedIssue(null);
+    updateUrlState({ view: "aging", issueId: null });
+  };
+
+  const goToIssues = () => {
+    setView("list");
+    setSelectedIssue(null);
+    updateUrlState({ view: "list", issueId: null });
   };
 
   const updateFollowers = async (issueId: string, followers: string[]) => {
@@ -535,7 +597,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     return (
       <div
         className="card"
-        onClick={() => setSelectedIssue(issue)}
+        onClick={() => openIssue(issue)}
         style={{
           padding: 16,
           marginBottom: 10,
@@ -741,19 +803,13 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
           ) : null}
           <button
             className={view === "list" ? "btn btn-primary" : "btn"}
-            onClick={() => {
-              setView("list");
-              setSelectedIssue(null);
-            }}
+            onClick={goToIssues}
           >
             Issues
           </button>
           <button
             className={view === "aging" ? "btn btn-primary" : "btn"}
-            onClick={() => {
-              setView("aging");
-              setSelectedIssue(null);
-            }}
+            onClick={goToAging}
           >
             Punch list & aging
           </button>
@@ -1085,7 +1141,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
         <div>
           <button
             className="btn"
-            onClick={() => setSelectedIssue(null)}
+            onClick={backToList}
             style={{ marginBottom: 14 }}
           >
             ← Back to list
@@ -1546,10 +1602,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                           borderTop: "1px solid #eaecf0",
                           cursor: "pointer",
                         }}
-                        onClick={() => {
-                          setView("list");
-                          setSelectedIssue(issue);
-                        }}
+                        onClick={() => openIssue(issue)}
                       >
                         <td style={{ padding: "12px 8px", fontWeight: 600 }}>
                           {issue.title}
