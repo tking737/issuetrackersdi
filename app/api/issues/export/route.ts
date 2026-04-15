@@ -15,8 +15,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const fileType = String(url.searchParams.get("type") || "excel").toLowerCase();
     const platform = String(url.searchParams.get("platform") || "All");
-    const primaryStatus = String(url.searchParams.get("status") || "All");
     const secondaryStatus = String(url.searchParams.get("secondaryStatus") || "All");
+    const statusesParam = String(url.searchParams.get("statuses") || "");
 
     let issues = await listIssues();
 
@@ -24,20 +24,24 @@ export async function GET(request: Request) {
       issues = issues.filter((issue) => issue.platform === platform);
     }
 
-    if (primaryStatus !== "All") {
-      issues = issues.filter((issue) => issue.status === primaryStatus);
-    }
-
     if (secondaryStatus !== "All") {
       issues = issues.filter((issue) => issue.secondaryStatus === secondaryStatus);
     }
 
+    const selectedStatuses = statusesParam
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (selectedStatuses.length) {
+      issues = issues.filter((issue) => selectedStatuses.includes(issue.status));
+    }
+
     const rows = issues.map((issue) => ({
-      ID: issue.id,
       Title: issue.title,
       Platform: issue.platform,
       "Primary Status": issue.status,
-      "Secondary Status": issue.secondaryStatus,
+      "Secondary Status": issue.secondaryStatus || "None",
       Owner: issue.owner || "",
       Priority: issue.priority,
       Category: issue.category,
@@ -53,7 +57,19 @@ export async function GET(request: Request) {
     }));
 
     if (fileType === "excel") {
-      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const worksheet = XLSX.utils.json_to_sheet(
+        rows.length
+          ? rows
+          : [
+              {
+                Message: "No issues matched the selected filters.",
+                Platform: platform,
+                Statuses: selectedStatuses.join(", ") || "None",
+                "Secondary Status": secondaryStatus,
+              },
+            ]
+      );
+
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Issues");
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
@@ -62,7 +78,7 @@ export async function GET(request: Request) {
         headers: {
           "Content-Type":
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename="issues-export.xlsx"`,
+          "Content-Disposition": 'attachment; filename="issues-export.xlsx"',
         },
       });
     }
@@ -89,42 +105,48 @@ export async function GET(request: Request) {
 
       drawLine("Issues Export", 40, 16, true);
       drawLine(`Platform Filter: ${platform}`, 40);
-      drawLine(`Primary Status Filter: ${primaryStatus}`, 40);
+      drawLine(
+        `Status Filter: ${selectedStatuses.length ? selectedStatuses.join(", ") : "All"}`,
+        40
+      );
       drawLine(`Secondary Status Filter: ${secondaryStatus}`, 40);
       y -= 8;
 
-      for (const issue of issues) {
-        if (y < 120) {
-          page = pdfDoc.addPage([612, 792]);
-          y = 760;
-        }
-
-        drawLine(issue.title, 40, 12, true);
-        drawLine(`ID: ${issue.id}`, 40);
-        drawLine(`Platform: ${issue.platform}`, 40);
-        drawLine(`Primary Status: ${issue.status}`, 40);
-        drawLine(`Secondary Status: ${issue.secondaryStatus}`, 40);
-        drawLine(`Owner: ${issue.owner || "Unassigned"}`, 40);
-        drawLine(`Priority: ${issue.priority}`, 40);
-        drawLine(`Category: ${issue.category}`, 40);
-        drawLine(`Submitter: ${issue.submitterName} (${issue.submitter})`, 40);
-        drawLine(`Votes: ${issue.votes}`, 40);
-        drawLine(`Followers: ${issue.notifyOnResolve.join(", ") || "None"}`, 40);
-
-        const descriptionLines = issue.description
-          ? issue.description.match(/.{1,95}/g) || []
-          : [""];
-
-        drawLine("Description:", 40, 10, true);
-        for (const line of descriptionLines) {
+      if (!issues.length) {
+        drawLine("No issues matched the selected filters.", 40, 12, true);
+      } else {
+        for (const issue of issues) {
           if (y < 120) {
             page = pdfDoc.addPage([612, 792]);
             y = 760;
           }
-          drawLine(line, 60);
-        }
 
-        y -= 10;
+          drawLine(issue.title, 40, 12, true);
+          drawLine(`Platform: ${issue.platform}`, 40);
+          drawLine(`Primary Status: ${issue.status}`, 40);
+          drawLine(`Secondary Status: ${issue.secondaryStatus || "None"}`, 40);
+          drawLine(`Owner: ${issue.owner || "Unassigned"}`, 40);
+          drawLine(`Priority: ${issue.priority}`, 40);
+          drawLine(`Category: ${issue.category}`, 40);
+          drawLine(`Submitter: ${issue.submitterName} (${issue.submitter})`, 40);
+          drawLine(`Votes: ${issue.votes}`, 40);
+          drawLine(`Followers: ${issue.notifyOnResolve.join(", ") || "None"}`, 40);
+
+          const descriptionLines = issue.description
+            ? issue.description.match(/.{1,95}/g) || []
+            : [""];
+
+          drawLine("Description:", 40, 10, true);
+          for (const line of descriptionLines) {
+            if (y < 120) {
+              page = pdfDoc.addPage([612, 792]);
+              y = 760;
+            }
+            drawLine(line, 60);
+          }
+
+          y -= 10;
+        }
       }
 
       const pdfBytes = await pdfDoc.save();
@@ -132,7 +154,7 @@ export async function GET(request: Request) {
       return new NextResponse(Buffer.from(pdfBytes), {
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="issues-export.pdf"`,
+          "Content-Disposition": 'attachment; filename="issues-export.pdf"',
         },
       });
     }
