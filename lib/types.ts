@@ -1,11 +1,19 @@
 export type IssueStatus = "Open" | "In Progress" | "Resolved";
+
+export type SecondaryStatus =
+  | "None"
+  | "Submitted to Sage"
+  | "Working on Internal Solution";
+
 export type IssuePriority = "Low" | "Medium" | "High" | "Critical";
+
 export type IssueCategory =
   | "Bug"
   | "Performance"
   | "Feature Request"
   | "Question"
   | "Other";
+
 export type IssuePlatform =
   | "Sage Intacct"
   | "Sage Paperless"
@@ -33,6 +41,8 @@ export type Issue = {
   category: IssueCategory;
   platform: IssuePlatform;
   status: IssueStatus;
+  secondaryStatus: SecondaryStatus;
+  owner: string | null;
   priority: IssuePriority;
   submitter: string;
   submitterName: string;

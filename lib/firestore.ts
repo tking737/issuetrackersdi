@@ -8,6 +8,7 @@ import {
   IssuePlatform,
   IssuePriority,
   IssueStatus,
+  SecondaryStatus,
   UserSession,
 } from "@/lib/types";
 
@@ -20,6 +21,8 @@ function mapIssue(id: string, data: FirebaseFirestore.DocumentData): Issue {
     category: data.category as IssueCategory,
     platform: data.platform as IssuePlatform,
     status: data.status as IssueStatus,
+    secondaryStatus: (data.secondaryStatus || "None") as SecondaryStatus,
+    owner: data.owner ? String(data.owner) : null,
     priority: data.priority as IssuePriority,
     submitter: String(data.submitter || ""),
     submitterName: String(data.submitterName || ""),
@@ -73,6 +76,8 @@ export async function createIssue(input: {
     category: input.category,
     platform: input.platform,
     status: "Open",
+    secondaryStatus: "None",
+    owner: null,
     priority: input.priority,
     description: input.description,
     submitterName: input.submitterName,
@@ -225,5 +230,23 @@ export async function updateIssueStatus(issueId: string, status: IssueStatus) {
     status,
     resolvedAt: status === "Resolved" ? new Date().toISOString() : null,
   });
+  return getIssueById(issueId);
+}
+
+export async function updateSecondaryStatus(
+  issueId: string,
+  secondaryStatus: SecondaryStatus
+) {
+  const ref = issuesCollection.doc(issueId);
+  await ref.update({ secondaryStatus });
+  return getIssueById(issueId);
+}
+
+export async function assignIssueOwner(
+  issueId: string,
+  owner: string | null
+) {
+  const ref = issuesCollection.doc(issueId);
+  await ref.update({ owner });
   return getIssueById(issueId);
 }

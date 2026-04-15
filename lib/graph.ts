@@ -156,3 +156,49 @@ export async function sendAddedSubscriberEmail(options: {
     html: `<p>You were added as a subscriber to the issue <strong>${options.issueTitle}</strong>.</p><p><strong>Added by:</strong> ${options.addedBy}</p><p>You will receive updates when this issue is resolved.</p><p><a href="${issueUrl}">Open the ticket</a></p>`,
   });
 }
+
+export async function sendDailyAssignedIssuesEmail(options: {
+  recipient: string;
+  issues: Array<{
+    id: string;
+    title: string;
+    platform: string;
+    status: string;
+    secondaryStatus: string;
+    priority: string;
+    createdAt: string;
+  }>;
+  appUrl?: string;
+}) {
+  if (!options.issues.length) return 0;
+
+  const baseUrl = getBaseUrl(options.appUrl);
+
+  const html = `
+    <h2>Your Assigned Issues</h2>
+    <p>Here is your 8:00 AM report of issues assigned to you.</p>
+    ${options.issues
+      .map(
+        (issue) => `
+        <div style="margin-bottom:16px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+          <p style="margin:0 0 8px 0;"><strong>${issue.title}</strong></p>
+          <p style="margin:0;">Platform: ${issue.platform}</p>
+          <p style="margin:0;">Primary Status: ${issue.status}</p>
+          <p style="margin:0;">Secondary Status: ${issue.secondaryStatus}</p>
+          <p style="margin:0;">Priority: ${issue.priority}</p>
+          <p style="margin:0 0 8px 0;">Created: ${issue.createdAt}</p>
+          <p style="margin:0;"><a href="${baseUrl}/?issue=${encodeURIComponent(
+            issue.id
+          )}">Open issue</a></p>
+        </div>
+      `
+      )
+      .join("")}
+  `;
+
+  return sendMail({
+    to: [options.recipient],
+    subject: "Daily assigned issues report",
+    html,
+  });
+}
