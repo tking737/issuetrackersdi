@@ -46,12 +46,6 @@ type StatusChecks = {
   resolved: boolean;
 };
 
-type ExportStatusChecks = {
-  open: boolean;
-  inProgress: boolean;
-  resolved: boolean;
-};
-
 function Badge({
   label,
   color,
@@ -181,14 +175,6 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     inProgress: true,
     resolved: false,
   });
-  const [exportStatusChecks, setExportStatusChecks] = useState<ExportStatusChecks>({
-    open: true,
-    inProgress: true,
-    resolved: false,
-  });
-  const [exportPlatform, setExportPlatform] = useState("All");
-  const [exportSecondaryStatus, setExportSecondaryStatus] =
-    useState<SecondaryStatus | "All">("All");
   const [filterPriority, setFilterPriority] = useState("All");
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterPlatform, setFilterPlatform] = useState("All");
@@ -215,8 +201,24 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [titleError, setTitleError] = useState("");
   const [shakeTitle, setShakeTitle] = useState(false);
+  const [exportStatusChecks, setExportStatusChecks] = useState<StatusChecks>({
+    open: true,
+    inProgress: true,
+    resolved: false,
+  });
+  const [exportSecondaryStatus, setExportSecondaryStatus] =
+    useState<SecondaryStatus | "All">("All");
 
   useEffect(() => setIssues(initialIssues), [initialIssues]);
+  const adminEmails = useMemo(
+    () =>
+      (process.env.NEXT_PUBLIC_ADMIN_EMAILS || "")
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    []
+  );
+
 
   const updateUrlState = (next: {
     view?: "list" | "aging";
@@ -419,46 +421,6 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     updateUrlState({ view: "list", issueId: null });
   };
 
-  const exportIssues = async (type: "excel" | "pdf") => {
-    if (
-      !exportStatusChecks.open &&
-      !exportStatusChecks.inProgress &&
-      !exportStatusChecks.resolved
-    ) {
-      showNotif("Select at least one status to export.", "error");
-      return;
-    }
-
-    const statuses: string[] = [];
-    if (exportStatusChecks.open) statuses.push("Open");
-    if (exportStatusChecks.inProgress) statuses.push("In Progress");
-    if (exportStatusChecks.resolved) statuses.push("Resolved");
-
-    const params = new URLSearchParams();
-    params.set("type", type);
-    params.set("platform", exportPlatform);
-    params.set("secondaryStatus", exportSecondaryStatus);
-    params.set("statuses", statuses.join(","));
-
-    const res = await authorizedFetch(`/api/issues/export?${params.toString()}`);
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      showNotif(data?.error || "Export failed.", "error");
-      return;
-    }
-
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = type === "excel" ? "issues-export.xlsx" : "issues-export.pdf";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  };
-
   const updateFollowers = async (issueId: string, followers: string[]) => {
     setBusyAction(`followers-${issueId}`);
 
@@ -657,6 +619,83 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     );
   };
 
+  const changeSecondaryStatus = async (
+    issueId: string,
+    nextSecondaryStatus: SecondaryStatus
+  ) => {
+    setBusyAction(`secondary-${issueId}`);
+    const res = await authorizedFetch(`/api/issues/${issueId}/secondary-status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secondaryStatus: nextSecondaryStatus }),
+    });
+    setBusyAction(null);
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      showNotif(data?.error || "Could not update secondary status.", "error");
+      return;
+    }
+
+    await refreshIssue(issueId);
+    showNotif("Secondary status updated.");
+  };
+
+  const assignOwner = async (issueId: string, ownerEmail: string | null) => {
+    setBusyAction(`owner-${issueId}`);
+    const res = await authorizedFetch(`/api/issues/${issueId}/owner`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner: ownerEmail }),
+    });
+    setBusyAction(null);
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      showNotif(data?.error || "Could not assign owner.", "error");
+      return;
+    }
+
+    await refreshIssue(issueId);
+    showNotif(ownerEmail ? "Owner assigned." : "Owner cleared.");
+  };
+
+  const exportIssues = async (type: "excel" | "pdf") => {
+    const selectedStatuses = [
+      exportStatusChecks.open ? "Open" : null,
+      exportStatusChecks.inProgress ? "In Progress" : null,
+      exportStatusChecks.resolved ? "Resolved" : null,
+    ].filter(Boolean) as string[];
+
+    if (!selectedStatuses.length) {
+      showNotif("Select at least one status to export.", "error");
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("type", type);
+    params.set("platform", filterPlatform);
+    params.set("statuses", selectedStatuses.join(","));
+    params.set("secondaryStatus", exportSecondaryStatus);
+
+    const res = await authorizedFetch(`/api/issues/export?${params.toString()}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      showNotif(data?.error || "Export failed.", "error");
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `issues-export.${type === "excel" ? "xlsx" : "pdf"}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) =>
     setFiles(Array.from(event.target.files || []));
 
@@ -716,6 +755,12 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
               />
               <Badge label={issue.category} color="#533AB7" bg="#EEEDFE" />
               <Badge label={issue.platform} color="#155eef" bg="#eff8ff" />
+              {issue.secondaryStatus && issue.secondaryStatus !== "None" ? (
+                <Badge label={issue.secondaryStatus} color="#b54708" bg="#fffaeb" />
+              ) : null}
+              {issue.owner ? (
+                <Badge label={`Owner: ${issue.owner}`} color="#344054" bg="#f2f4f7" />
+              ) : null}
               {voted ? (
                 <Badge label="You voted" color="#155eef" bg="#dfeafe" />
               ) : null}
@@ -1291,6 +1336,21 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                 />
                 <Badge label={liveSelected.category} color="#533AB7" bg="#EEEDFE" />
                 <Badge label={liveSelected.platform} color="#155eef" bg="#eff8ff" />
+                {liveSelected.secondaryStatus &&
+                liveSelected.secondaryStatus !== "None" ? (
+                  <Badge
+                    label={liveSelected.secondaryStatus}
+                    color="#b54708"
+                    bg="#fffaeb"
+                  />
+                ) : null}
+                {liveSelected.owner ? (
+                  <Badge
+                    label={`Owner: ${liveSelected.owner}`}
+                    color="#344054"
+                    bg="#f2f4f7"
+                  />
+                ) : null}
               </div>
 
               <h2 style={{ margin: 0, fontSize: 22 }}>{liveSelected.title}</h2>
@@ -1541,6 +1601,49 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   </div>
                 </div>
 
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ fontWeight: 700, marginTop: 0 }}>Secondary status</p>
+                  <select
+                    className="select"
+                    value={liveSelected.secondaryStatus || "None"}
+                    onChange={(e) =>
+                      void changeSecondaryStatus(
+                        liveSelected.id,
+                        e.target.value as SecondaryStatus
+                      )
+                    }
+                    disabled={busyAction === `secondary-${liveSelected.id}`}
+                  >
+                    <option value="None">None</option>
+                    <option value="Submitted to Sage">Submitted to Sage</option>
+                    <option value="Working on Internal Solution">
+                      Working on Internal Solution
+                    </option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ fontWeight: 700, marginTop: 0 }}>Assign owner</p>
+                  <select
+                    className="select"
+                    value={liveSelected.owner || ""}
+                    onChange={(e) =>
+                      void assignOwner(
+                        liveSelected.id,
+                        e.target.value ? e.target.value : null
+                      )
+                    }
+                    disabled={busyAction === `owner-${liveSelected.id}`}
+                  >
+                    <option value="">Unassigned</option>
+                    {adminEmails.map((email) => (
+                      <option key={email} value={email}>
+                        {email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <p style={{ fontWeight: 700, marginTop: 0 }}>
                     Manage subscribers
@@ -1616,7 +1719,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   )}
                 </div>
               </div>
-            )}
+            )}            
           </div>
         </div>
       ) : null}
@@ -1625,62 +1728,59 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
         <div>
           {currentUser.isAdmin ? (
             <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-              <h3 style={{ marginTop: 0 }}>Export Punch List & Aging</h3>
-
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
-                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={exportStatusChecks.open}
-                    onChange={(e) =>
-                      setExportStatusChecks((prev) => ({
-                        ...prev,
-                        open: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span>Open</span>
-                </label>
-
-                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={exportStatusChecks.inProgress}
-                    onChange={(e) =>
-                      setExportStatusChecks((prev) => ({
-                        ...prev,
-                        inProgress: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span>In Progress</span>
-                </label>
-
-                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={exportStatusChecks.resolved}
-                    onChange={(e) =>
-                      setExportStatusChecks((prev) => ({
-                        ...prev,
-                        resolved: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span>Resolved</span>
-                </label>
-              </div>
-
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Export</h3>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={exportStatusChecks.open}
+                      onChange={(e) =>
+                        setExportStatusChecks((prev) => ({
+                          ...prev,
+                          open: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Open</span>
+                  </label>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={exportStatusChecks.inProgress}
+                      onChange={(e) =>
+                        setExportStatusChecks((prev) => ({
+                          ...prev,
+                          inProgress: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>In Progress</span>
+                  </label>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={exportStatusChecks.resolved}
+                      onChange={(e) =>
+                        setExportStatusChecks((prev) => ({
+                          ...prev,
+                          resolved: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Resolved</span>
+                  </label>
+                </div>
+
                 <select
                   className="select"
-                  value={exportPlatform}
-                  onChange={(e) => setExportPlatform(e.target.value)}
+                  value={filterPlatform}
+                  onChange={(e) => setFilterPlatform(e.target.value)}
                   style={{ width: 180 }}
                 >
                   <option value="All">All Platforms</option>
-                  {PLATFORMS.map((platform) => (
-                    <option key={platform}>{platform}</option>
+                  {PLATFORMS.map((o) => (
+                    <option key={o}>{o}</option>
                   ))}
                 </select>
 
@@ -1690,7 +1790,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   onChange={(e) =>
                     setExportSecondaryStatus(e.target.value as SecondaryStatus | "All")
                   }
-                  style={{ width: 260 }}
+                  style={{ width: 250 }}
                 >
                   <option value="All">All Secondary Statuses</option>
                   <option value="None">None</option>
@@ -1709,7 +1809,6 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
               </div>
             </div>
           ) : null}
-
           <div className="grid-3" style={{ marginBottom: 16 }}>
             <button
               type="button"
