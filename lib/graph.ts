@@ -50,6 +50,11 @@ async function sendMail(options: {
   to: string[];
   subject: string;
   html: string;
+  attachments?: Array<{
+    name: string;
+    contentBytesBase64: string;
+    contentType: string;
+  }>;
 }) {
   const recipients = Array.from(
     new Set(options.to.map((value) => value.trim().toLowerCase()).filter(Boolean))
@@ -63,6 +68,14 @@ async function sendMail(options: {
   let sent = 0;
 
   for (const recipient of recipients) {
+    const attachments =
+      options.attachments?.map((attachment) => ({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: attachment.name,
+        contentType: attachment.contentType,
+        contentBytes: attachment.contentBytesBase64,
+      })) || [];
+
     const mailRes = await fetch(
       `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(
         sender
@@ -81,6 +94,7 @@ async function sendMail(options: {
               content: options.html,
             },
             toRecipients: [{ emailAddress: { address: recipient } }],
+            attachments,
           },
           saveToSentItems: true,
         }),
@@ -96,6 +110,56 @@ async function sendMail(options: {
   }
 
   return sent;
+}
+
+function escapeCsvValue(value: string | number | null | undefined) {
+  const stringValue = String(value ?? "");
+  if (
+    stringValue.includes(",") ||
+    stringValue.includes('"') ||
+    stringValue.includes("\n")
+  ) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
+function buildAssignedIssuesCsv(
+  issues: Array<{
+    id: string;
+    title: string;
+    platform: string;
+    status: string;
+    secondaryStatus: string;
+    priority: string;
+    createdAt: string;
+  }>
+) {
+  const headers = [
+    "Title",
+    "Platform",
+    "Primary Status",
+    "Secondary Status",
+    "Priority",
+    "Created At",
+    "Issue URL",
+  ];
+
+  const baseUrl = getBaseUrl();
+
+  const rows = issues.map((issue) => [
+    issue.title,
+    issue.platform,
+    issue.status,
+    issue.secondaryStatus,
+    issue.priority,
+    issue.createdAt,
+    `${baseUrl}/?issue=${encodeURIComponent(issue.id)}`,
+  ]);
+
+  return [headers, ...rows]
+    .map((row) => row.map((cell) => escapeCsvValue(cell)).join(","))
+    .join("\n");
 }
 
 export async function sendResolvedEmails(options: {
@@ -176,7 +240,7 @@ export async function sendDailyAssignedIssuesEmail(options: {
 
   const html = `
     <h2>Your Assigned Issues</h2>
-    <p>Here is your 8:00 AM report of issues assigned to you.</p>
+    <p>Here is your 8:00 AM report of currently active issues assigned to you.</p>
     ${options.issues
       .map(
         (issue) => `
@@ -194,11 +258,22 @@ export async function sendDailyAssignedIssuesEmail(options: {
       `
       )
       .join("")}
+    <p>A CSV export of these assigned issues is attached.</p>
   `;
+
+  const csv = buildAssignedIssuesCsv(options.issues);
+  const csvBase64 = Buffer.from(csv, "utf-8").toString("base64");
 
   return sendMail({
     to: [options.recipient],
     subject: "Daily assigned issues report",
     html,
+    attachments: [
+      {
+        name: "assigned-issues-report.csv",
+        contentBytesBase64: csvBase64,
+        contentType: "text/csv",
+      },
+    ],
   });
 }

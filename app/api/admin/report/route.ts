@@ -15,7 +15,11 @@ export async function GET() {
     const adminEmails = parseAdminEmails();
 
     for (const adminEmail of adminEmails) {
-      const assignedIssues = issues.filter((issue) => issue.owner === adminEmail);
+      const assignedIssues = issues.filter(
+        (issue) =>
+          issue.owner === adminEmail &&
+          (issue.status === "Open" || issue.status === "In Progress")
+      );
 
       if (assignedIssues.length) {
         await sendDailyAssignedIssuesEmail({
