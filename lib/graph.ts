@@ -37,15 +37,6 @@ async function getGraphAccessToken() {
   return tokenData.access_token as string;
 }
 
-function getBaseUrl(appUrl?: string) {
-  return (
-    appUrl ||
-    process.env.APP_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3002"
-  ).replace(/\/+$/, "");
-}
-
 async function sendMail(options: {
   to: string[];
   subject: string;
@@ -112,6 +103,15 @@ async function sendMail(options: {
   return sent;
 }
 
+function getBaseUrl(appUrl?: string) {
+  return (
+    appUrl ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3002"
+  ).replace(/\/+$/, "");
+}
+
 function escapeCsvValue(value: string | number | null | undefined) {
   const stringValue = String(value ?? "");
   if (
@@ -126,12 +126,18 @@ function escapeCsvValue(value: string | number | null | undefined) {
 
 function buildAssignedIssuesCsv(
   issues: Array<{
-    id: string;
     title: string;
     platform: string;
     status: string;
     secondaryStatus: string;
+    owner: string | null;
     priority: string;
+    category: string;
+    submitterName: string;
+    submitter: string;
+    description: string;
+    votes: number;
+    followers: string[];
     createdAt: string;
   }>
 ) {
@@ -140,21 +146,31 @@ function buildAssignedIssuesCsv(
     "Platform",
     "Primary Status",
     "Secondary Status",
+    "Owner",
     "Priority",
+    "Category",
+    "Submitter",
+    "Submitter Email",
+    "Description",
+    "Votes",
+    "Followers/Subscribers",
     "Created At",
-    "Issue URL",
   ];
-
-  const baseUrl = getBaseUrl();
 
   const rows = issues.map((issue) => [
     issue.title,
     issue.platform,
     issue.status,
     issue.secondaryStatus,
+    issue.owner || "",
     issue.priority,
+    issue.category,
+    issue.submitterName,
+    issue.submitter,
+    issue.description,
+    issue.votes,
+    issue.followers.join(", "),
     issue.createdAt,
-    `${baseUrl}/?issue=${encodeURIComponent(issue.id)}`,
   ]);
 
   return [headers, ...rows]
@@ -229,7 +245,14 @@ export async function sendDailyAssignedIssuesEmail(options: {
     platform: string;
     status: string;
     secondaryStatus: string;
+    owner: string | null;
     priority: string;
+    category: string;
+    submitterName: string;
+    submitter: string;
+    description: string;
+    votes: number;
+    followers: string[];
     createdAt: string;
   }>;
   appUrl?: string;
