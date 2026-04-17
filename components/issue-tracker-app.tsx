@@ -1778,6 +1778,20 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                     />
                     <span>In Progress</span>
                   </label>
+
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={exportStatusChecks.resolved ?? false}
+                      onChange={(e) =>
+                        setExportStatusChecks((prev) => ({
+                          ...prev,
+                          resolved: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Resolved</span>
+                  </label>
                   
                   <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input
