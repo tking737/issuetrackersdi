@@ -1,4 +1,4 @@
-export type IssueStatus = "Open" | "In Progress" | "Resolved";
+export type IssueStatus = "Open" | "In Progress" | "Resolved" | "Resolved with Workaround";
 
 export type SecondaryStatus =
   | "None"

@@ -21,9 +21,10 @@ export async function POST(
     const status = String(body?.status || "").trim() as
       | "Open"
       | "In Progress"
-      | "Resolved";
+      | "Resolved"
+      | "Resolved with Workaround";
 
-    if (!status || !["Open", "In Progress", "Resolved"].includes(status)) {
+    if (!status || !["Open", "In Progress", "Resolved", "Resolved with Workaround"].includes(status)) {
       return NextResponse.json({ error: "Invalid status." }, { status: 400 });
     }
 
@@ -32,7 +33,7 @@ export async function POST(
     const issue = await updateIssueStatus(id, status);
     let notified = 0;
 
-    if (status === "Resolved") {
+    if (status === "Resolved" || status === "Resolved with Workaround") {
       const recipients = Array.from(
         new Set([issue.submitter, ...issue.notifyOnResolve])
       );

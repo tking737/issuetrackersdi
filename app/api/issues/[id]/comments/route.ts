@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   addComment,
+  getIssueById,
   uploadCommentAttachment,
 } from "@/lib/firestore";
 import { requireUser } from "@/lib/server-auth";
+import { sendCommentNotificationEmails } from "@/lib/graph";
 
 export async function POST(
   request: Request,
@@ -12,6 +14,8 @@ export async function POST(
   try {
     const user = await requireUser(request);
     const { id } = await params;
+
+    const existingIssue = await getIssueById(id);
 
     const form = await request.formData();
     const text = String(form.get("body") || "").trim();
@@ -37,6 +41,21 @@ export async function POST(
     }
 
     const issue = await addComment(id, user.name, text, attachments);
+
+    const recipients = Array.from(
+      new Set([existingIssue.submitter, ...existingIssue.notifyOnResolve])
+    ).filter((email) => email.toLowerCase() !== user.email.toLowerCase());
+
+    if (recipients.length) {
+      await sendCommentNotificationEmails({
+        recipients,
+        commenterName: user.name,
+        issueTitle: issue.title,
+        issueId: issue.id,
+        commentText: text,
+      });
+    }
+
     return NextResponse.json(issue);
   } catch (error: any) {
     return NextResponse.json(

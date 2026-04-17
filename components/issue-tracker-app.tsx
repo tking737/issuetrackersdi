@@ -44,6 +44,7 @@ type StatusChecks = {
   open: boolean;
   inProgress: boolean;
   resolved: boolean;
+  resolvedWithWorkaround: boolean;
 };
 
 function Badge({
@@ -174,6 +175,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     open: true,
     inProgress: true,
     resolved: false,
+    resolvedWithWorkaround: false,
   });
   const [filterPriority, setFilterPriority] = useState("All");
   const [filterCategory, setFilterCategory] = useState("All");
@@ -205,6 +207,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     open: true,
     inProgress: true,
     resolved: false,
+    resolvedWithWorkaround: false,
   });
   const [exportSecondaryStatus, setExportSecondaryStatus] =
     useState<SecondaryStatus | "All">("All");
@@ -323,7 +326,8 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
         const matchStatus =
           (statusChecks.open && i.status === "Open") ||
           (statusChecks.inProgress && i.status === "In Progress") ||
-          (statusChecks.resolved && i.status === "Resolved");
+          (statusChecks.resolved && i.status === "Resolved") ||
+          (statusChecks.resolvedWithWorkaround && i.status === "Resolved with Workaround");
 
         const matchPriority =
           filterPriority === "All" || i.priority === filterPriority;
@@ -341,8 +345,8 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
         );
       })
       .sort((a, b) => {
-        const aResolved = a.status === "Resolved" ? 1 : 0;
-        const bResolved = b.status === "Resolved" ? 1 : 0;
+        const aResolved = a.status === "Resolved" ? 1 : 0 || a.status === "Resolved with Workaround" ? 1 : 0;
+        const bResolved = b.status === "Resolved" ? 1 : 0 || b.status === "Resolved with Workaround" ? 1 : 0;
         if (aResolved !== bResolved) return aResolved - bResolved;
         if (sortBy === "votes") return b.votes - a.votes;
         if (sortBy === "priority") {
@@ -367,8 +371,8 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     sortBy,
   ]);
 
-  const activeIssues = issues.filter((i) => i.status !== "Resolved");
-  const resolvedIssues = issues.filter((i) => i.status === "Resolved");
+  const activeIssues = issues.filter((i) => i.status !== "Resolved" && i.status !== "Resolved with Workaround");
+  const resolvedIssues = issues.filter((i) => i.status === "Resolved" || i.status === "Resolved with Workaround");
   const avgAge = activeIssues.length
     ? Math.round(
         activeIssues.reduce((s, i) => s + daysSince(i.createdAt), 0) /
@@ -386,12 +390,14 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
         open: true,
         inProgress: true,
         resolved: false,
+        resolvedWithWorkaround: false,
       });
     } else {
       setStatusChecks({
         open: false,
         inProgress: false,
         resolved: true,
+        resolvedWithWorkaround: true,
       });
     }
 
@@ -590,7 +596,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
     const data = await res.json();
     await refreshIssue(issueId);
     showNotif(
-      newStatus === "Resolved"
+      newStatus === "Resolved" || newStatus === "Resolved with Workaround"
         ? `Issue resolved${
             typeof data.notified === "number"
               ? ` and ${data.notified} recipient(s) were notified.`
@@ -665,6 +671,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
       exportStatusChecks.open ? "Open" : null,
       exportStatusChecks.inProgress ? "In Progress" : null,
       exportStatusChecks.resolved ? "Resolved" : null,
+      exportStatusChecks.resolvedWithWorkaround ? "Resolved with Workaround" : null,
     ].filter(Boolean) as string[];
 
     if (!selectedStatuses.length) {
@@ -799,10 +806,10 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   {issue.attachments.length === 1 ? "" : "s"}
                 </span>
               ) : null}
-              {issue.status !== "Resolved" ? (
+              {issue.status !== "Resolved" && issue.status !== "Resolved with Workaround" ? (
                 <span>{age}d open</span>
               ) : (
-                <span>Resolved {formatDate(issue.resolvedAt)}</span>
+                <span>{issue.status === "Resolved" ? "Resolved" : "Resolved with Workaround"} {formatDate(issue.resolvedAt)}</span>
               )}
             </div>
           </div>
@@ -1006,6 +1013,20 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                     }
                   />
                   <span>Resolved</span>
+                </label>
+
+                <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={statusChecks.resolvedWithWorkaround}
+                    onChange={(e) =>
+                      setStatusChecks((prev) => ({
+                        ...prev,
+                        resolvedWithWorkaround: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Resolved with Workaround</span>
                 </label>
               </div>
 
@@ -1757,18 +1778,19 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                     />
                     <span>In Progress</span>
                   </label>
+                  
                   <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input
                       type="checkbox"
-                      checked={exportStatusChecks.resolved}
+                      checked={exportStatusChecks.resolvedWithWorkaround ?? false}
                       onChange={(e) =>
                         setExportStatusChecks((prev) => ({
                           ...prev,
-                          resolved: e.target.checked,
+                          resolvedWithWorkaround: e.target.checked,
                         }))
                       }
                     />
-                    <span>Resolved</span>
+                    <span>Resolved with Workaround</span>
                   </label>
                 </div>
 
@@ -1857,7 +1879,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
             <button
               type="button"
               className="card"
-              onClick={() => goToFilteredList("resolved")}
+              onClick={() => goToFilteredList("resolved")} 
               style={{
                 padding: 16,
                 background: "#ecfdf3",

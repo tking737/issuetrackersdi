@@ -190,7 +190,7 @@ export async function sendResolvedEmails(options: {
 
   return sendMail({
     to: options.recipients,
-    subject: `Resolved: ${options.issueTitle}`,
+    subject: `Resolved: ${options.issueTitle}`, 
     html: `<p>Your issue <strong>${options.issueTitle}</strong> has been marked as resolved.</p><p><a href="${issueUrl}">Open the ticket</a></p>`,
   });
 }
@@ -298,5 +298,38 @@ export async function sendDailyAssignedIssuesEmail(options: {
         contentType: "text/csv",
       },
     ],
+  });
+}
+
+export async function sendCommentNotificationEmails(options: {
+  recipients: string[];
+  commenterName: string;
+  issueTitle: string;
+  issueId: string;
+  commentText: string;
+  appUrl?: string;
+}) {
+  const recipients = Array.from(
+    new Set(options.recipients.map((value) => value.trim().toLowerCase()).filter(Boolean))
+  );
+
+  if (!recipients.length) return 0;
+
+  const issueUrl = `${getBaseUrl(options.appUrl)}/?issue=${encodeURIComponent(
+    options.issueId
+  )}`;
+
+  return sendMail({
+    to: recipients,
+    subject: `New comment on: ${options.issueTitle}`,
+    html: `
+      <p><strong>${options.commenterName}</strong> commented on an issue you are following or submitted.</p>
+      <p><strong>Issue:</strong> ${options.issueTitle}</p>
+      <p><strong>Comment:</strong></p>
+      <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;white-space:pre-wrap;">
+        ${options.commentText.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+      </div>
+      <p style="margin-top:12px;"><a href="${issueUrl}">Open the issue</a></p>
+    `,
   });
 }
