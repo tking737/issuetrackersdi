@@ -6,6 +6,7 @@ import { SecondaryStatus } from "@/lib/types";
 const allowedSecondaryStatuses: SecondaryStatus[] = [
   "None",
   "Submitted to Sage",
+  "Submitted to Ramp",
   "Working on Internal Solution",
 ];
 

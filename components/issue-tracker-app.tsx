@@ -1637,6 +1637,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   >
                     <option value="None">None</option>
                     <option value="Submitted to Sage">Submitted to Sage</option>
+                    <option value="Submitted to Ramp">Submitted to Ramp</option>
                     <option value="Working on Internal Solution">
                       Working on Internal Solution
                     </option>
@@ -1831,6 +1832,7 @@ export function IssueTrackerApp({ initialIssues, currentUser }: Props) {
                   <option value="All">All Secondary Statuses</option>
                   <option value="None">None</option>
                   <option value="Submitted to Sage">Submitted to Sage</option>
+                  <option value="Submitted to Ramp">Submitted to Ramp</option>
                   <option value="Working on Internal Solution">
                     Working on Internal Solution
                   </option>

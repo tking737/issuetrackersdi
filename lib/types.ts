@@ -3,6 +3,7 @@ export type IssueStatus = "Open" | "In Progress" | "Resolved" | "Resolved with W
 export type SecondaryStatus =
   | "None"
   | "Submitted to Sage"
+  | "Submitted to Ramp"
   | "Working on Internal Solution";
 
 export type IssuePriority = "Low" | "Medium" | "High" | "Critical";
